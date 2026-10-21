@@ -98,11 +98,15 @@ document.getElementById('doc-save').onclick=()=>{
  if(!picked.length)return alert('Seleccioná al menos un importe.');
  const mode=document.getElementById('doc-mode').value;
  if(mode==='debt'&&picked.length!==1)return alert('Para registrar una deuda, seleccioná un único saldo total. No sumes cuotas, consumos y total.');
- if(!confirm('¿Guardar '+picked.length+' registro(s)? Revisá que no estén duplicados.'))return;
  const date=new Date().toLocaleDateString('en-CA');
+ const candidates=mode==='debt'?[]:picked.map(x=>({id:crypto.randomUUID(),description:(sourceName+' — '+x.label).slice(0,120),amount:x.amount,type:'expense',category:'Otros',date,frequency:'once'}));
+ const dup=candidates.filter(x=>window.miBalanceDuplicates?.(x)?.length);
+ const within=new Set(),repeated=candidates.filter(x=>{const key=x.amount+'|'+x.date+'|'+x.description.toLowerCase();if(within.has(key))return true;within.add(key);return false});
+ if((dup.length||repeated.length)&&!confirm('Atención: '+dup.length+' registro(s) coinciden con movimientos existentes y '+repeated.length+' se repiten en esta importación. Revisá antes de continuar. ¿Guardar igualmente?'))return;
+ if(!confirm('¿Guardar '+picked.length+' registro(s)? Verificá que no se mezclen saldo total, cuotas y consumos.'))return;
  if(mode==='debt'){const x=picked[0];state.debts.push({id:crypto.randomUUID(),name:sourceName+' — '+x.label.slice(0,65),balance:x.amount,rate:0,payment:0,due:'',status:'current'})}
- else{picked.forEach(x=>state.moves.push({id:crypto.randomUUID(),description:(sourceName+' — '+x.label).slice(0,120),amount:x.amount,type:'expense',category:'Otros',date,frequency:'once'}))}
- save();status.textContent='Se guardaron '+picked.length+' registro(s). Podés editarlos en Movimientos o Deudas.';show(mode==='debt'?'deudas':'movimientos');
+ else{state.moves.push(...candidates)}
+ save();if(window.miBalanceRefreshInsights)window.miBalanceRefreshInsights();status.textContent='Se guardaron '+picked.length+' registro(s). Podés editarlos en Movimientos o Deudas.';show(mode==='debt'?'deudas':'movimientos');
 };
 financialDiagnosis();
 })();
