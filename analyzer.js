@@ -25,7 +25,33 @@ async function readImage(f){
  const worker=await Tesseract.createWorker('spa',1,{logger:m=>{if(m.status==='recognizing text')status.textContent='Leyendo imagen: '+Math.round((m.progress||0)*100)+'%'}});
  try{return (await worker.recognize(f)).data.text}finally{await worker.terminate()}
 }
-function renderAdvice(){
+function financialDiagnosis(){
+ const now=new Date(),monthKey=now.toLocaleDateString('en-CA').slice(0,7);
+ const moves=state.moves.filter(m=>m.date?.slice(0,7)===monthKey);
+ const income=moves.filter(m=>m.type==='income').reduce((a,m)=>a+(Number(m.amount)||0),0);
+ const expenses=moves.filter(m=>m.type==='expense').reduce((a,m)=>a+(Number(m.amount)||0),0);
+ const active=state.debts.filter(d=>Number(d.balance)>0);
+ const debt=active.reduce((a,d)=>a+(Number(d.balance)||0),0);
+ const payments=active.reduce((a,d)=>a+(Number(d.payment)||0),0);
+ const overdue=active.filter(d=>d.status==='overdue'||(d.due&&d.due<now.toLocaleDateString('en-CA'))).length;
+ const missing=active.filter(d=>!(Number(d.payment)>0)).length;
+ const free=income-expenses-payments;
+ const ratio=income>0?payments/income:null;
+ const alerts=[],steps=[];
+ if(income<=0){alerts.push('No hay ingresos registrados este mes. No es posible medir tu capacidad real de pago sin ese dato.');steps.push('Registrá tus ingresos del mes para obtener un diagnóstico más confiable.')}
+ if(overdue){alerts.push(overdue+' compromiso(s) aparecen vencidos por fecha o estado. Verificá con cada acreedor si existen recargos, cortes de servicio u otras consecuencias.');steps.push('Contactá primero a los acreedores con vencimientos críticos para conocer el saldo actualizado y opciones de regularización.')}
+ if(income>0&&free<0){alerts.push('Los gastos y pagos previstos superan tus ingresos del mes en '+cash(Math.abs(free))+'.');steps.push('Revisá gastos postergables y negociá cuotas antes de asumir nuevos compromisos.')}
+ if(income>0&&ratio>=.4){alerts.push('Los pagos previstos de deudas representan '+Math.round(ratio*100)+'% de tus ingresos registrados; es una señal para revisar el presupuesto, no un diagnóstico definitivo.')}
+ if(missing){alerts.push(missing+' deuda(s) tienen saldo pero ningún pago mensual previsto. La proyección puede subestimar tus obligaciones.');steps.push('Completá los pagos mínimos o cuotas de cada deuda y sus vencimientos.')}
+ if(!active.length)steps.push('No hay deudas pendientes registradas. Mantené al día los gastos y reservá un pequeño margen para imprevistos si es posible.');
+ if(active.length){steps.push('Priorizá vivienda, alimentos, servicios esenciales y compromisos con consecuencias inmediatas; después compará intereses y costos de financiación.');steps.push('Pedí por escrito saldo total, tasa, cargos y condiciones antes de aceptar refinanciaciones.')}
+ if(income>0&&free>0&&debt>0)steps.push('Tu margen mensual estimado es '+cash(free)+'. No lo destines íntegramente a deuda sin contemplar gastos irregulares e imprevistos.');
+ let level='Información insuficiente',reason='Faltan datos para evaluar el riesgo.';
+ if(income>0){level=free<0||overdue?'Atención prioritaria':ratio!==null&&ratio>=.4?'Presupuesto ajustado':'Situación a revisar';reason=free<0?'Los compromisos superan los ingresos registrados.':overdue?'Hay compromisos vencidos.':ratio>=.4?'Las cuotas ocupan una parte elevada de los ingresos.':'No aparecen desequilibrios graves en los registros actuales, aunque pueden faltar datos.'}
+ const box=document.getElementById('financial-diagnosis');if(!box)return;
+ box.innerHTML='<h2>Tu diagnóstico financiero</h2><p class="hint">Orientativo y basado exclusivamente en los datos que cargaste en Mi Balance; no analiza cuentas bancarias ni consulta tu historial crediticio.</p><div class="grid" style="margin:14px 0"><div class="card"><small>Ingresos del mes</small><div class="number">'+cash(income)+'</div></div><div class="card"><small>Gastos del mes</small><div class="number">'+cash(expenses)+'</div></div><div class="card"><small>Cuotas previstas</small><div class="number">'+cash(payments)+'</div></div><div class="card"><small>Margen estimado</small><div class="number '+(free<0?'red':'green')+'">'+cash(free)+'</div></div></div><h3>'+clean(level)+'</h3><p class="hint">'+clean(reason)+'</p><h3>Qué revisar</h3>'+alerts.map(x=>'<p class="hint">• '+clean(x)+'</p>').join('')+'<h3>Próximos pasos posibles</h3>'+steps.map((x,i)=>'<p class="hint">'+(i+1)+'. '+clean(x)+'</p>').join('')+'<p class="hint">Importante: un gasto registrado y una cuota de deuda no deben contarse dos veces. Si faltan ingresos, gastos o cuotas, el diagnóstico puede cambiar. Este análisis no reemplaza asesoramiento financiero profesional.</p>';
+}
+function renderAdvice(){financialDiagnosis();
  const kind=document.getElementById('doc-type').value, detected=lines;
  const totals=detected.filter(x=>x.kind==='balance'||x.kind==='total').sort((a,b)=>b.amount-a.amount);
  const min=detected.find(x=>x.kind==='minimum');
@@ -66,6 +92,7 @@ file.addEventListener('change',async()=>{
 });
 document.getElementById('doc-reanalyze').onclick=()=>{extracted=preview.value;renderReview()};
 document.getElementById('doc-type').onchange=renderAdvice;
+document.getElementById('doc-diagnose').onclick=financialDiagnosis;
 document.getElementById('doc-save').onclick=()=>{
  const picked=[...document.querySelectorAll('[data-pick]:checked')].map(x=>lines[Number(x.dataset.pick)]).filter(Boolean);
  if(!picked.length)return alert('Seleccioná al menos un importe.');
@@ -77,4 +104,5 @@ document.getElementById('doc-save').onclick=()=>{
  else{picked.forEach(x=>state.moves.push({id:crypto.randomUUID(),description:(sourceName+' — '+x.label).slice(0,120),amount:x.amount,type:'expense',category:'Otros',date,frequency:'once'}))}
  save();status.textContent='Se guardaron '+picked.length+' registro(s). Podés editarlos en Movimientos o Deudas.';show(mode==='debt'?'deudas':'movimientos');
 };
+financialDiagnosis();
 })();
