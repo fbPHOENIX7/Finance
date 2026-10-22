@@ -15,9 +15,8 @@ function simulate(debts,extra,method){
   let pool=Math.max(0,extra);
   const previous=ds.reduce((a,d)=>a+d.balance,0);
   for(const d of ds){const charge=d.balance*d.rate/1200;d.balance+=charge;interest+=charge}
-  for(const d of ds){const pay=Math.min(d.balance,d.payment);d.balance-=pay}
-  // When a debt is paid off, redirect its former payment to other debts.
-  pool+=ds.filter(d=>d.balance<=.01).reduce((a,d)=>a+d.payment,0);
+  for(const d of ds){const pay=Math.min(d.balance,d.payment);d.balance-=pay;pool+=Math.max(0,d.payment-pay)}
+  // Redirect only the unused part of each scheduled payment.
   const sorted=[...ds].filter(d=>d.balance>.01).sort((a,b)=>method==='snowball'?a.balance-b.balance:b.rate-a.rate||a.balance-b.balance);
   for(const d of sorted){const pay=Math.min(pool,d.balance);d.balance-=pay;pool-=pay}
   const remaining=ds.reduce((a,d)=>a+d.balance,0);
